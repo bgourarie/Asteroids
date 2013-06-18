@@ -172,14 +172,22 @@ def create_ast_bound(vertices, rotation, direction,ast_type):
     #sidelength=0
     max_dist = 0
     for vert in vertices:
-        curr_dist= distance(vert,vertices[len(vertices)-1])
+        curr_dist= distance(vert,(x0,y0))
         if curr_dist>max_dist:
             max_dist=curr_dist
-        
+
+    #r=max_dist
+    #adding this until we can get the dist calculations to work properly, since its a good enoughapproximation
+    if ast_type==0:
+        max_dist=MAX_AST_ZERO
+    if ast_type==1:
+        max_dist=MAX_AST_ONE
+    if ast_type==2:
+        max_dist=MAX_AST_TWO
     r= max_dist# changed from a bounding square to a circle for ease...
    # verts=[(x0+math.cos(theta0),y0+math.sin(theta0)),(x0+math.cos(theta1),y0+math.sin(theta1)),(x0+math.cos(theta2),y0+math.sin(theta2)),(x0+math.cos(theta3),y0+math.sin(theta3))]
     #return the centrepoint and radius of the bounding circle..
-    print("ast bound radius = ",r)
+    #print("ast bound radius = ",r)
     return [(x0,y0),r]
 
 def draw_explosion(ctr, dist):
