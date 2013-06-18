@@ -3,7 +3,7 @@ import random
 import math
 
 pygame.init()
-pygame.key.set_repeat(600,600)
+
 MIN_AST_ZERO=45
 MAX_AST_ZERO=75
 MIN_AST_ONE=30
@@ -23,6 +23,8 @@ clockspeed=20
 SHOT_SCALE=4
 ROTAT_DELTA=3
 ACCEL_DELTA=0.1
+SHOT_DELAY=5
+pygame.key.set_repeat(math.ceil(1000/clockspeed/2),math.ceil(1000/clockspeed/2))
 
 def rdm(least,most):
     return random.randrange(least,most+1)
@@ -30,7 +32,9 @@ def rdm(least,most):
 def draw_asteroid(screen,x,y,size):
     #draw a polygon with semi random corners
     pygame.draw.polygon(screen,white,[(x,y),(x+size,y),(x+size,y+size),(x,y+size)],5)
-
+def distance(c1,c2): # calculates the distance between two xy pairs c1 and c2
+     dist = math.sqrt(math.pow((c2[0]-c1[0]),2)+math.pow((c2[1]-c1[1]),2))
+     return dist
 #returns an (x,y) pair between -2 and 2
 def get_rdm_dir():
     return (rdm(-2,2),rdm(-2,2))
@@ -92,7 +96,7 @@ def draw_asteroidV(l):
     draw_asteroid(l[0],l[1],l[2],l[3])
 #takes a centre point of where the ship is, and its current rotation
     # and draws the ship centered at x,y pointing in the given rotation
-def draw_ship(screen,x,y,theta):
+def draw_ship(screen,x,y,theta,drawThruster):
     t1=math.radians(theta) # tip is at v1 let's say....
     t2= math.radians((theta+138)%360) 
     t3=math.radians((theta-138)%360)
@@ -108,13 +112,16 @@ def draw_ship(screen,x,y,theta):
     pygame.draw.line(screen,white,v1,v2,2)
     pygame.draw.line(screen,white,v1,v3,2)
     pygame.draw.line(screen,white,A_v2,A_v3,2)
+    if drawThruster:
+        x=(A_v2[0]+A_v3[0])/2
+        y=(A_v2[1]+A_v3[1])/2
+        pygame.draw.circle(screen,white,(int(x),int(y)),2)
+    return False
 def new_shot(ship, theta):
     x0=ship[0]
     y0=ship[1]
-    x1=x0+SHOT_SCALE*math.cos(math.radians(theta))
-    y1=y0+SHOT_SCALE*math.sin(math.radians(theta))
-   # print("Pew pew")
-    return [(x0,y0),(x1,y1),theta]
+   
+    return [(x0,y0),theta,0]
 
 
 '''
@@ -127,7 +134,10 @@ def collision_player_complex(ship, theta, asteroid):
 def collision_shot_simple(shot, boundary): 
      # we simply check start and end of shot.. which is a pair of xy pairs since it's a line... so
     #return collision_simple(shot[0],boundary) or collision_simple(shot[1],boundary)
-    c_shot = shot[0]
+#calculate the ctr of the shot..
+    x=(shot[0][0]+shot[2]*math.cos(math.radians(shot[1])))%size[0]
+    y= (shot[0][1]+shot[2]*math.sin(math.radians(shot[1])))%size[1]
+    c_shot = (x,y)
     r_shot=SHOT_SCALE
     r_bound=boundary[1]
     ctr_bound=boundary[0]
@@ -157,21 +167,19 @@ def create_ast_bound(vertices, rotation, direction,ast_type):
     theta3= math.radians(315 +rotation)
 
     # we don't actually need  direction.
-    # but we will use ast_type
-    sidelength=0 # square will have lengths larger than the maximum size of any vertex..
-    if ast_type == 0:
-        sidelength=MAX_AST_ZERO
-    else:
-        if ast_type==1:
-            sidelength=MAX_AST_ONE
-        else:
-            if ast_type==2:
-                sidelength=MAX_AST_TWO
-            else:
-                print("Bound type error with type=",ast_type)
-    r= sidelength # changed from a bounding square to a circle for ease...
+
+    # we will calculate the length based on the vertex with furthest dist from centre...
+    #sidelength=0
+    max_dist = 0
+    for vert in vertices:
+        curr_dist= distance(vert,vertices[len(vertices)-1])
+        if curr_dist>max_dist:
+            max_dist=curr_dist
+        
+    r= max_dist# changed from a bounding square to a circle for ease...
    # verts=[(x0+math.cos(theta0),y0+math.sin(theta0)),(x0+math.cos(theta1),y0+math.sin(theta1)),(x0+math.cos(theta2),y0+math.sin(theta2)),(x0+math.cos(theta3),y0+math.sin(theta3))]
     #return the centrepoint and radius of the bounding circle..
+    print("ast bound radius = ",r)
     return [(x0,y0),r]
 
 def draw_explosion(ctr, dist):
@@ -185,10 +193,12 @@ def draw_explosion(ctr, dist):
         pygame.draw.circle(screen,white,(x,y),1,0)
 def draw_shot(screen,shot):
    # print(shot)
-    x0y0=shot[0]
-    ctr= (int(x0y0[0]),int(x0y0[1]))
-    #x1y1=shot[1]
-    pygame.draw.circle(screen, white,ctr,2,0)
+   # shot is a vector containing (xy, theta, distance)
+   # so we draw a point on a circle with ctr xy, and radius lifetime, in the direction of theta
+    x=(shot[0][0] +shot[2]*math.cos(math.radians(shot[1])))%size[0]
+    y= (shot[0][1] +shot[2]*math.sin(math.radians(shot[1])))%size[1]
+    pygame.draw.circle(screen,white,(int(x),int(y)),SHOT_SCALE,0)
+    #pygame.draw.circle(screen, white,ctr,2,0)
 def calculateMovement(xy,theta, dist):
     # moves the xy pair  the dist distance in theta direction...
     # returns the new location xy
@@ -197,10 +207,10 @@ def calculateMovement(xy,theta, dist):
     newY= (xy[1]+dist*math.sin(theta)) % size[1]
     return (newX,newY)    
     # return a list of vertices, centered at the same place as the asteroid vector...
-def calculate_shot_movement(xy,theta,dist):
-    newX= (xy[0]+ dist*math.cos(theta))
-    newY= (xy[1]+dist*math.sin(theta)) 
-    return (newX,newY)    
+#def calculate_shot_movement(xy,theta,dist):
+ #   newX= (xy[0]+ dist*math.cos(theta))
+  #  newY= (xy[1]+dist*math.sin(theta)) 
+   # return (newX,newY)    
     
 # polygon(screen,color,[(x1,y1),(x2,y2)...],width=0 (filled))
 size = (700,500)
@@ -218,7 +228,7 @@ clock = pygame.time.Clock()
 ship = (size[0]/2,size[1]/2)
 asteroids=[] # see AST_VECTOR_DESCRIPTION for explanation of what goes in here
 ast_bounds=[] # see AST_BOUND_SHAPES for description
-shots=[] # |contains two points (a line) and an angle that the shot is moving at...
+shots=[] # each element is a vector of (starting coordinates, angle of direction, lifetime)
 player_velocity=[]
 lives=3
 font = pygame.font.Font(None,25) # we'll use that for drawing the score
@@ -227,9 +237,11 @@ theta_changed=False
 #player_acceleration=0
 player_theta=0 # stored in degrees
 score=0
+thruster=False
 k=0
 diff_level=0
 ship_resetting=-1
+lastShot=0
 while done == False:
 # HANDLE EVENTS    
     for event in pygame.event.get():
@@ -237,13 +249,17 @@ while done == False:
             done=True
         if event.type==pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
-                #then player shoots
-                shots.append(new_shot(ship,player_theta))
+                #then player shoots. we need to slow down the shot rate, so we'll add a timer as well..
+                #also cant shoot while ship is exploded...
+                if lastShot<1 and ship_resetting<0:
+                    shots.append(new_shot(ship,player_theta))
+                    lastShot=SHOT_DELAY
             if event.key == pygame.K_UP:
                 #if we've turned, or not moved we'll add a new vector...
                 if theta_changed or len(player_velocity)==0:
                     player_velocity.append((ACCEL_DELTA,player_theta))
                     theta_changed=False
+                    thruster=True
                 else: # if not changed, remove the last vector added and increase it a bit
                     player_velocity.append((player_velocity.pop()[0]+ACCEL_DELTA,player_theta))
             if event.key == pygame.K_DOWN:
@@ -254,10 +270,10 @@ while done == False:
                 else: # if not changed, remove the last vector added and decrease it a bit
                     player_velocity.append((player_velocity.pop()[0]-ACCEL_DELTA,player_theta))
             if event.key == pygame.K_RIGHT:
-                player_theta-=ROTAT_DELTA
+                player_theta+=ROTAT_DELTA
                 theta_changed=True
             if event.key == pygame.K_LEFT:
-                player_theta+=ROTAT_DELTA
+                player_theta-=ROTAT_DELTA
                 theta_changed=False
 #        if event.type==pygame.KEYUP:
         # we don't handle keyups, because we really wanted to be handling repeated press...
@@ -265,11 +281,7 @@ while done == False:
             #and change player_velocity
 
 # HANDLE MOVEMENTS
-        #change player velocity based on acceleration
-    #player_acceleration
-        # we need to factor in the angle.. velocity should have a direction
-        # right now, turning is instant, but it should rotate the ship.
-        #first for asteroids...
+    #first for asteroids...
     for i in range(len(asteroids)):
         currX=(asteroids[i][0][ast_vect_len-1][0])
         currY=(asteroids[i][0][ast_vect_len-1][1])
@@ -283,32 +295,23 @@ while done == False:
     # second for player:
     #ship= calculateMovement(ship,player_theta,player_velocity)
     #player_velocity is a collection of vetors and angles, so we move the player for each one
-    for vel in player_velocity:
-        ship=calculateMovement(ship,vel[1],vel[0])
+    if ship_resetting<0: # dont move if ship is resetting..
+        for vel in player_velocity:
+            ship=calculateMovement(ship,vel[1],vel[0])
     
-    # third for shots (pew pew pew)
-    shotsToPop=[]# a list of indices to remove from shots
+  #third we calc movement of shots
+    #simply put, we will increase its lifetime, and delete if it is too old...
     for i in range(len(shots)):
-        theta = shots[i][2]
-        xy1= shots[i][0]
-        xy2=shots[i][1]
-       # print("theta=",
-        shots[i]=[(calculate_shot_movement(xy1,theta,SHOT_SCALE)),calculate_shot_movement(xy2,theta,SHOT_SCALE),theta]
-       #cleanup shots that have moved off screen:
-        x0=shots[i][0][0]
-        x1=shots[i][1][0]
-        y0=shots[i][0][1]
-        y1=shots[i][1][1]
-        if (x0<0 or x0>size[0]) and (x1<0 or x0>size[0]):
-            shotsToPop.append(i)
-    for k in shotsToPop:
-        shots.pop(k)
-    
+        shots[i][2]=shots[i][2]+3
+        # will that work? i dont think so..
+
+    for shot in shots:
+        if shot[2]>(2*size[0]/3): # we'll let it go approx 2/3rds of the screen before dissapearing
+            shots.remove(shot)
 
 
 #HANDLE COLLISIONS(happens after movements b/c what if asteroid dodges a bullet!
     # we'll set up bounding shapes, and tehn delete them later...
-
 
     for k in range(len(asteroids)):
        ast_bounds.append((create_ast_bound(asteroids[k][0],asteroids[k][1],asteroids[k][2],asteroids[k][3])))
@@ -321,8 +324,8 @@ while done == False:
             '''
 
  # check shot collisions first, player might just survive if they managed to shoot the asteroid at the last moment...
-    shots_to_pop=[]
-    ast_to_pop=[]
+   # shots_to_pop=[]
+    #ast_to_pop=[]
     for shot in shots:
         i=0 # so we can correspond to the asteroids list
         for bound in ast_bounds:
@@ -349,7 +352,9 @@ while done == False:
             i+=1 
    
     # now check if player collided
-    if ship_resetting<0: # if the ship is not resetting, we'll handle collision for i
+     # if the ship is not resetting, we'll handle collision for it
+     #also, if it just reset, we give it 2 seconds invincibility and also don't check collisions...
+    if ship_resetting<-clockspeed*2:
         for asteroid in ast_bounds:
             if collision_player_simple(ship,player_theta,asteroid):
                 if collision_player_complex(ship,player_theta,asteroid):
@@ -358,6 +363,8 @@ while done == False:
                     # need to do a pause until ship resets..
                     ship=(-1000,--1000)
                     player_velocity=[]
+                    #i don't believe that empties the velocity...
+                    print("player velocity= ",player_velocity)
                     player_theta=0
                     ship_resetting=80 # when that reaches 1, we'll reset..
                 print("Player blew up!")
@@ -385,17 +392,19 @@ while done == False:
     screen.blit(text,[10,10])
     # draw the lives remaining, as ships...
     for i in range(lives):
-        draw_ship(screen,30+30*i,50,270)
-    #draw player on screen!
-    draw_ship(screen,ship[0],ship[1],player_theta) 
-    #if no asteroids, draw some
+        draw_ship(screen,30+30*i,50,270, thruster)
+    #draw player on screen! (assigning thruster makes the thruster flash on/off when activated)
+    thruster=draw_ship(screen,ship[0],ship[1],player_theta,thruster) 
+    #if no asteroids, draw some. this should probably go elsewhere, since we are creating objects...
     if len(asteroids)==0:
-        for i in range(diff_level+2): 
+        for i in range(diff_level+1): 
             '''
                AST_VECTOR_DESCRIPTION:
                asteroids[i] = [vertices[], 0<=rotation<=360, direction (See get_rdm_dir() for range), type(0-3) ] 
             '''
-            asteroids.append((create_ast_vector(0,[rdm(100,size[0]-100),rdm(100,size[1]-100)]),rdm(0,360),get_rdm_dir(),0))
+            #we'll create two, and use a "keep out" box of 200 pixels that goes across the whoel screen, so the centre will be free for the playr to spawn
+            asteroids.append((create_ast_vector(0,[rdm(0,size[0]),rdm(size[1]/2+100,size[1])]),rdm(0,360),get_rdm_dir(),0))
+            asteroids.append((create_ast_vector(0,[ rdm(0,(size[0])), rdm(0,(size[1]/2)-100)]), rdm(0,360), get_rdm_dir(),0))
         diff_level+=1 #next round will be harder!
             # adds a vector of all its vertices, and a rotation offset...
     #draw asteroids
@@ -427,6 +436,7 @@ while done == False:
 
     clock.tick(clockspeed)
     k+=1
+    lastShot-=1
     ship_resetting-=1
    # if k%5==0:
 #    player_theta+=1
