@@ -20,11 +20,14 @@ pi = math.pi
 ast_vect_len=9
 ship_scale=15
 clockspeed=20
-SHOT_SCALE=4
+SHOT_SCALE=2
+SHOT_SPEED=5
 ROTAT_DELTA=3
 ACCEL_DELTA=0.1
 SHOT_DELAY=5
-pygame.key.set_repeat(math.ceil(1000/clockspeed/2),math.ceil(1000/clockspeed/2))
+TITLE_STRING="ASTEROIDS"
+pygame.key.set_repeat(math.ceil(500/clockspeed/2),math.ceil(500/clockspeed/2))
+
 
 def rdm(least,most):
     return random.randrange(least,most+1)
@@ -215,241 +218,336 @@ def calculateMovement(xy,theta, dist):
     newY= (xy[1]+dist*math.sin(theta)) % size[1]
     return (newX,newY)    
     # return a list of vertices, centered at the same place as the asteroid vector...
-#def calculate_shot_movement(xy,theta,dist):
- #   newX= (xy[0]+ dist*math.cos(theta))
-  #  newY= (xy[1]+dist*math.sin(theta)) 
-   # return (newX,newY)    
-    
-# polygon(screen,color,[(x1,y1),(x2,y2)...],width=0 (filled))
-size = (700,500)
-# we use set_mode b/c it allows us to do more then just make a window, also allows
-# for mouse control, full screen, etc. 
+   
+
+size = (600,400)
 screen = pygame.display.set_mode(size)
 pygame.display.set_caption("Asteroids!")
-
-#now, we'll need a state variable
 done = False
-
 # just a clock. tick tock
 clock = pygame.time.Clock()
-#initialise the polygons
-ship = (size[0]/2,size[1]/2)
-asteroids=[] # see AST_VECTOR_DESCRIPTION for explanation of what goes in here
-ast_bounds=[] # see AST_BOUND_SHAPES for description
-shots=[] # each element is a vector of (starting coordinates, angle of direction, lifetime)
-player_velocity=[]
-lives=3
-font = pygame.font.Font(None,25) # we'll use that for drawing the score
-explosions = [] # will store xy vectors  and lifetimesto draw explosions at...
-theta_changed=False
-#player_acceleration=0
-player_theta=0 # stored in degrees
-score=0
-thruster=False
-k=0
-diff_level=0
-ship_resetting=-1
-lastShot=0
-while done == False:
-# HANDLE EVENTS    
-    for event in pygame.event.get():
-        if event.type==pygame.QUIT:
-            done=True
-        if event.type==pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                #then player shoots. we need to slow down the shot rate, so we'll add a timer as well..
-                #also cant shoot while ship is exploded...
-                if lastShot<1 and ship_resetting<0:
-                    shots.append(new_shot(ship,player_theta))
-                    lastShot=SHOT_DELAY
-            if event.key == pygame.K_UP:
-                #if we've turned, or not moved we'll add a new vector...
-                if theta_changed or len(player_velocity)==0:
-                    player_velocity.append((ACCEL_DELTA,player_theta))
-                    theta_changed=False
-                    thruster=True
-                else: # if not changed, remove the last vector added and increase it a bit
-                    player_velocity.append((player_velocity.pop()[0]+ACCEL_DELTA,player_theta))
-            if event.key == pygame.K_DOWN:
-                #if we've turned or not accelerated, we'll add a new vector...
-                if theta_changed or len(player_velocity)==0:
-                    player_velocity.append((-ACCEL_DELTA,player_theta))
-                    theta_changed=False
-                else: # if not changed, remove the last vector added and decrease it a bit
-                    player_velocity.append((player_velocity.pop()[0]-ACCEL_DELTA,player_theta))
-            if event.key == pygame.K_RIGHT:
-                player_theta+=ROTAT_DELTA
-                theta_changed=True
-            if event.key == pygame.K_LEFT:
-                player_theta-=ROTAT_DELTA
-                theta_changed=False
-#        if event.type==pygame.KEYUP:
-        # we don't handle keyups, because we really wanted to be handling repeated press...
-    #would also add more shots if player fired, change player theta if necessary
-            #and change player_velocity
+#sounds...
+shot_sound=pygame.mixer.Sound("shot.wav")
+explosion_sound=pygame.mixer.Sound("explosion.wav")
+bg_music= pygame.mixer.Sound("asteroids.wav")
+#boolean to track if sound is on/off...
+sound_on=True
 
-# HANDLE MOVEMENTS
-    #first for asteroids...
-    for i in range(len(asteroids)):
-        currX=(asteroids[i][0][ast_vect_len-1][0])
-        currY=(asteroids[i][0][ast_vect_len-1][1])
-        #print(asteroids[i])
-        dirX=asteroids[i][2][0]
-        dirY=asteroids[i][2][1]
-        #need to store a direction too...
-        asteroids[i][0][ast_vect_len-1]= (((currX+dirX)%size[0]),(currY+dirY)%size[1])
-        asteroids[i]= (asteroids[i][0],asteroids[i][1]+(rdm(3,6)),asteroids[i][2],asteroids[i][3])
+# we have a wrapper loop to allow for a game menu/title screen,
+# and two inner loops- one which waits for/handles menu interaction
+#another for playing the game.
 
-    # second for player:
-    #ship= calculateMovement(ship,player_theta,player_velocity)
-    #player_velocity is a collection of vetors and angles, so we move the player for each one
-    if ship_resetting<0: # dont move if ship is resetting..
-        for vel in player_velocity:
-            ship=calculateMovement(ship,vel[1],vel[0])
-    
-  #third we calc movement of shots
-    #simply put, we will increase its lifetime, and delete if it is too old...
-    for i in range(len(shots)):
-        shots[i][2]=shots[i][2]+3
-        # will that work? i dont think so..
+while done==False:
+    # we draw a menu...
+    # title
+    titleFont = pygame.font.Font("Vectorb.ttf",65) # to draw the title...
+    title = titleFont.render(TITLE_STRING,True,white)
+    x_title= (size[0]//2)-(titleFont.size(TITLE_STRING)[0]//2)
+    y_title= (size[1]//4)-(titleFont.size(TITLE_STRING)[1]//2)
+    # menu options.. keyboard only for now b/c i need to take a break
+    menuFont = pygame.font.Font("Vectorb.ttf",20)
+    menu_string= "\'N\' for new game, \'P\' to pause"
+    menu_string2="Press \'M\' to toggle sound"
+    menu = menuFont.render(menu_string, True, white)
+    menu2= menuFont.render(menu_string2,True,white)
+    x_menu = (size[0]//2)-(menuFont.size(menu_string)[0]//2)
+    x_menu2= (size[0]//2)-(menuFont.size(menu_string2)[0]//2)
+    y_menu=size[1]-2*menuFont.size(menu_string)[1] - 45
+    y_menu2=size[1]-1*menuFont.size(menu_string2)[1]-15
 
-    for shot in shots:
-        if shot[2]>(2*size[0]/3): # we'll let it go approx 2/3rds of the screen before dissapearing
-            shots.remove(shot)
-
-
-#HANDLE COLLISIONS(happens after movements b/c what if asteroid dodges a bullet!
-    # we'll set up bounding shapes, and tehn delete them later...
-
-    for k in range(len(asteroids)):
-       ast_bounds.append((create_ast_bound(asteroids[k][0],asteroids[k][1],asteroids[k][2],asteroids[k][3])))
-       # this is just passing all info about the asteroid.
-    '''
-
-               AST_BOUNDS DESCRIPTION:
-               each element simply describes a circle,
-               with a centre point as a vector (ast_bound[0]) and a radius (ast_bound[1])
-            '''
-
- # check shot collisions first, player might just survive if they managed to shoot the asteroid at the last moment...
-   # shots_to_pop=[]
-    #ast_to_pop=[]
-    for shot in shots:
-        i=0 # so we can correspond to the asteroids list
-        for bound in ast_bounds:
-            if collision_shot_simple(shot,bound):
-                if collision_complicated(shot,asteroids[i][0]):
-                    old_asteroid=asteroids.pop(i)
-                    i-=1 # decr i since we removed an asteroid
-# this section needs a try-catch in case the shot instantly hits an asteroid (?)
-                    shots.remove(shot) # remove the shot since its used
-                    explosions.append((bound[0],0)) #store the center of the asteroid we blew up
-                    #new_bound=ast_bounds.remove(bound)
-                    #create two new asteroids centered at old_ast...
-                    if old_asteroid[3] <2:
-                        # then we create 2 new asteroids... (and corresponding bounding shapes)
-                        asteroids.append((create_ast_vector(old_asteroid[3]+1,old_asteroid[0][len(old_asteroid[0])-1]),rdm(0,360),get_rdm_dir(),old_asteroid[3]+1))
-                        ast_bounds.append((create_ast_bound(asteroids[len(asteroids)-1][0],asteroids[len(asteroids)-1][1],asteroids[len(asteroids)-1][2],asteroids[len(asteroids)-1][3])))
-                        asteroids.append((create_ast_vector(old_asteroid[3]+1,old_asteroid[0][len(old_asteroid[0])-1]),rdm(0,360),get_rdm_dir(),old_asteroid[3]+1))
-                        ast_bounds.append((create_ast_bound(asteroids[len(asteroids)-1][0],asteroids[len(asteroids)-1][1],asteroids[len(asteroids)-1][2],asteroids[len(asteroids)-1][3])))
-                        #now, we aren't changing i but i think that'll be okay...
-                    #add to the score based on the type of asteroid
-                    score+= ASTEROID_SCORES[old_asteroid[3]]
-                    #lastly, since we removed the shot, we need to break from this loop (since we're done with this shot)
-                    break
-            i+=1 
-   
-    # now check if player collided
-     # if the ship is not resetting, we'll handle collision for it
-     #also, if it just reset, we give it 2 seconds invincibility and also don't check collisions...
-    if ship_resetting<-clockspeed*2:
-        for asteroid in ast_bounds:
-            if collision_player_simple(ship,player_theta,asteroid):
-                if collision_player_complex(ship,player_theta,asteroid):
-                    explosions.append((ship,0))
-                    lives-=1
-                    # need to do a pause until ship resets..
-                    ship=(-1000,--1000)
-                    player_velocity=[]
-                    #i don't believe that empties the velocity...
-                    print("player velocity= ",player_velocity)
-                    player_theta=0
-                    ship_resetting=80 # when that reaches 1, we'll reset..
-                print("Player blew up!")
-                #print(ship)
-                #print(asteroid)
-                #done=True # for now we just end the game. 
-        
-    else: #ship is still resetting...
-        if ship_resetting==0: # on the last time, we'll redraw it
-            ship=(size[0]/2,size[1]/2)
-            #player_theta = 270
-            #player_velocity=[]
-            theta_changed=False
-        #print("ship is resetting... ",ship_resetting)
-    ast_bounds=[]
-    #delete the bounds..
-
-    
-#draw stuff:
-#first clear screen
-    screen.fill(black)
-    # draw the score!
-    scoreString= "Score: "+str(score)
-    text= font.render(scoreString,True,white)
-    screen.blit(text,[10,10])
-    # draw the lives remaining, as ships...
-    for i in range(lives):
-        draw_ship(screen,30+30*i,50,270, thruster)
-    #draw player on screen! (assigning thruster makes the thruster flash on/off when activated)
-    thruster=draw_ship(screen,ship[0],ship[1],player_theta,thruster) 
-    #if no asteroids, draw some. this should probably go elsewhere, since we are creating objects...
-    if len(asteroids)==0:
-        for i in range(diff_level+1): 
-            '''
-               AST_VECTOR_DESCRIPTION:
-               asteroids[i] = [vertices[], 0<=rotation<=360, direction (See get_rdm_dir() for range), type(0-3) ] 
-            '''
-            #we'll create two, and use a "keep out" box of 200 pixels that goes across the whoel screen, so the centre will be free for the playr to spawn
-            asteroids.append((create_ast_vector(0,[rdm(0,size[0]),rdm(size[1]/2+100,size[1])]),rdm(0,360),get_rdm_dir(),0))
-            asteroids.append((create_ast_vector(0,[ rdm(0,(size[0])), rdm(0,(size[1]/2)-100)]), rdm(0,360), get_rdm_dir(),0))
-        diff_level+=1 #next round will be harder!
-            # adds a vector of all its vertices, and a rotation offset...
-    #draw asteroids
-    for i in range(len(asteroids)):
-        vert=draw_ast_vector(asteroids[i][0],asteroids[i][1])
-        #assignment allowed print for debugging
-
-    #draw shots
-    for s in shots:
-        draw_shot(screen,s)
-
-    #draw explosions
-    explosions_to_pop=[]
-    for k in range(len(explosions)):
-        #draw the explosion:
-        draw_explosion(explosions[k][0],3+explosions[k][1])
-        print(explosions[k][1])
-        explosions[k]= [ explosions[k][0],explosions[k][1]+1]
-        #print(explosions[k][1])
-        if explosions[k][1]>20:
-            # we'll save it to remove later..
-            explosions_to_pop.append(k)
-    h=0 # this allows us to pop from old indices without getting messed up..
-    for p in explosions_to_pop:
-        explosions.pop(p-h)
-        h+=1
-        
+    screen.blit(title,(x_title,y_title))
+    screen.blit(menu,(x_menu,y_menu))
+    screen.blit(menu2,(x_menu2,y_menu2))
     pygame.display.flip()
+    #title_bounds=pygame
+    #and wait for input
+    waiting=True
+    while waiting:
+        
+        for event in pygame.event.get():
+            '''if event.type==pygame.MOUSEBUTTONDOWN:
+                loc = pygame.mouse.get_pos()
+               #
+                    print("you clicked my tralalala")
+                    waiting=False
+                    gameRunning=True
+                else:
+                    print("you clicked, but missed..")
+                    '''
+            if event.type==pygame.KEYDOWN:
+                if event.key == pygame.K_n:
+                    print("New game!")
+                    waiting=False
+                    gameRunning=True
+                if event.key== pygame.K_m:
+                    sound_on= not sound_on
+                if event.key==pygame.K_q:
+                    done=True
+                    waiting=False
+                    
+    if sound_on:
+        bg_music.play(-1)
+    ship = (size[0]/2,size[1]/2)
+    asteroids=[] # see AST_VECTOR_DESCRIPTION for explanation of what goes in here
+    ast_bounds=[] # see AST_BOUND_SHAPES for description
+    shots=[] # each element is a vector of (starting coordinates, angle of direction, lifetime)
+    player_velocity=[]
+    lives=3
+    font = pygame.font.Font(None,25) # we'll use that for drawing the score
+    explosions = [] # will store xy vectors  and lifetimesto draw explosions at...
+    theta_changed=False
+    #player_acceleration=0
+    player_theta=0 # stored in degrees
+    score=0
+    thruster=False
+    k=0
+    diff_level=0
+    ship_resetting=-1
+    lastShot=0
 
-    clock.tick(clockspeed)
-    k+=1
-    lastShot-=1
-    ship_resetting-=1
-   # if k%5==0:
-#    player_theta+=1
+    paused=False
+    while gameRunning:
+    # HANDLE EVENTS    
+        for event in pygame.event.get():
+            if event.type==pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    #then player shoots. we need to slow down the shot rate, so we'll add a timer as well..
+                    #also cant shoot while ship is exploded...
+                    if lastShot<1 and ship_resetting<0:
+                        if sound_on:
+                            shot_sound.play()
+                        shots.append(new_shot(ship,player_theta))
+                        lastShot=SHOT_DELAY
+                elif event.key == pygame.K_UP:
+                    #if we've turned, or not moved we'll add a new vector...
+                    if theta_changed or len(player_velocity)==0:
+                        player_velocity.append((ACCEL_DELTA,player_theta))
+                        theta_changed=False
+                        thruster=True
+                    else: # if not changed, remove the last vector added and increase it a bit
+                        player_velocity.append((player_velocity.pop()[0]+ACCEL_DELTA,player_theta))
+                elif event.key == pygame.K_DOWN:
+                    #if we've turned or not accelerated, we'll add a new vector...
+                    if theta_changed or len(player_velocity)==0:
+                        player_velocity.append((-ACCEL_DELTA,player_theta))
+                        theta_changed=False
+                    else: # if not changed, remove the last vector added and decrease it a bit
+                        player_velocity.append((player_velocity.pop()[0]-ACCEL_DELTA,player_theta))
+                elif event.key == pygame.K_RIGHT:
+                    player_theta+=ROTAT_DELTA
+                    theta_changed=True
+                elif event.key == pygame.K_LEFT:
+                    player_theta-=ROTAT_DELTA
+                    theta_changed=False
+            if event.type==pygame.KEYUP:
+                if event.key==pygame.K_ESCAPE:
+                    #done=True
+                    gameRunning=False
+                elif event.key==pygame.K_m:
+                     sound_on=not sound_on
+                     if not sound_on:
+                         pygame.mixer.stop()
+                     else:
+                         bg_music.play()
+                elif event.key==pygame.K_q:
+                    print("quitting to menu!")
+                    gameRunning=False
+                elif event.key==pygame.K_p:
+                    print("pausing game by busy waiting...")
+                    paused=True                
+            elif event.type==pygame.QUIT:
+                done=True
+                gameRunning=False
+                break
+            
+    #        if event.type==pygame.KEYUP:
+            # we don't handle keyups, because we really wanted to be handling repeated press...
+        #would also add more shots if player fired, change player theta if necessary
+                #and change player_velocity
+    # this goes here to handle pausing...
+        while paused:
+            for event in pygame.event.get():
+                if event.type==pygame.KEYUP:
+                    if event.key==pygame.K_p:
+                        paused=False
+                        print("unpausing")
+                        break
+                    elif event.key==pygame.K_q:
+                        gameRunning=False
+                        paused=False
+                        break
+                    elif event.type==pygame.QUIT:
+                        done=True
+                        gameRunning=False
+                        paused=False
+                        
+        # HANDLE MOVEMENTS
+        #first for asteroids...
+        for i in range(len(asteroids)):
+            currX=(asteroids[i][0][ast_vect_len-1][0])
+            currY=(asteroids[i][0][ast_vect_len-1][1])
+            #print(asteroids[i])
+            dirX=asteroids[i][2][0]
+            dirY=asteroids[i][2][1]
+            #need to store a direction too...
+            asteroids[i][0][ast_vect_len-1]= (((currX+dirX)%size[0]),(currY+dirY)%size[1])
+            asteroids[i]= (asteroids[i][0],asteroids[i][1]+(rdm(3,6)),asteroids[i][2],asteroids[i][3])
+
+        # second for player:
+        #ship= calculateMovement(ship,player_theta,player_velocity)
+        #player_velocity is a collection of vetors and angles, so we move the player for each one
+        if ship_resetting<0: # dont move if ship is resetting..
+            for vel in player_velocity:
+                ship=calculateMovement(ship,vel[1],vel[0])
+        
+      #third we calc movement of shots
+        #simply put, we will increase its lifetime, and delete if it is too old...
+        for i in range(len(shots)):
+            shots[i][2]=shots[i][2]+SHOT_SPEED
+            # will that work? i dont think so..
+
+        for shot in shots:
+            if shot[2]>(size[0]//2+30):# we're just making sure it can reach the edges..
+                shots.remove(shot)
 
 
-# end while loop
+    #HANDLE COLLISIONS(happens after movements b/c what if asteroid dodges a bullet!
+        # we'll set up bounding shapes, and tehn delete them later...
+
+        for k in range(len(asteroids)):
+           ast_bounds.append((create_ast_bound(asteroids[k][0],asteroids[k][1],asteroids[k][2],asteroids[k][3])))
+           # this is just passing all info about the asteroid.
+        '''
+
+                   AST_BOUNDS DESCRIPTION:
+                   each element simply describes a circle,
+                   with a centre point as a vector (ast_bound[0]) and a radius (ast_bound[1])
+                '''
+
+     # check shot collisions first, player might just survive if they managed to shoot the asteroid at the last moment...
+       # shots_to_pop=[]
+        #ast_to_pop=[]
+        for shot in shots:
+            i=0 # so we can correspond to the asteroids list
+            for bound in ast_bounds:
+                if collision_shot_simple(shot,bound):
+                    if collision_complicated(shot,asteroids[i][0]):
+                        #play a sound to celebrate the explosions!
+                        if sound_on:
+                            explosion_sound.play()
+                        old_asteroid=asteroids.pop(i)
+                        i-=1 # decr i since we removed an asteroid
+    # this section needs a try-catch in case the shot instantly hits an asteroid (?)
+                        shots.remove(shot) # remove the shot since its used
+                        explosions.append((bound[0],0)) #store the center of the asteroid we blew up
+                        #new_bound=ast_bounds.remove(bound)
+                        #create two new asteroids centered at old_ast...
+                        if old_asteroid[3] <2:
+                            # then we create 2 new asteroids... (and corresponding bounding shapes)
+                            asteroids.append((create_ast_vector(old_asteroid[3]+1,old_asteroid[0][len(old_asteroid[0])-1]),rdm(0,360),get_rdm_dir(),old_asteroid[3]+1))
+                            ast_bounds.append((create_ast_bound(asteroids[len(asteroids)-1][0],asteroids[len(asteroids)-1][1],asteroids[len(asteroids)-1][2],asteroids[len(asteroids)-1][3])))
+                            asteroids.append((create_ast_vector(old_asteroid[3]+1,old_asteroid[0][len(old_asteroid[0])-1]),rdm(0,360),get_rdm_dir(),old_asteroid[3]+1))
+                            ast_bounds.append((create_ast_bound(asteroids[len(asteroids)-1][0],asteroids[len(asteroids)-1][1],asteroids[len(asteroids)-1][2],asteroids[len(asteroids)-1][3])))
+                            #now, we aren't changing i but i think that'll be okay...
+                        #add to the score based on the type of asteroid
+                        score+= ASTEROID_SCORES[old_asteroid[3]]
+                        #lastly, since we removed the shot, we need to break from this loop (since we're done with this shot)
+                        break
+                i+=1 
+       
+        # now check if player collided
+         # if the ship is not resetting, we'll handle collision for it
+         #also, if it just reset, we give it 2 seconds invincibility and also don't check collisions...
+        if ship_resetting<-clockspeed*2:
+            for asteroid in ast_bounds:
+                if collision_player_simple(ship,player_theta,asteroid):
+                    if collision_player_complex(ship,player_theta,asteroid):
+                        if sound_on:
+                            explosion_sound.play()
+                        explosions.append((ship,0))
+                        lives-=1
+                        # need to do a pause until ship resets..
+                        ship=(-1000,--1000)
+                        player_velocity=[]
+                        #i don't believe that empties the velocity...
+                        print("player velocity= ",player_velocity)
+                        player_theta=0
+                        ship_resetting=80 # when that reaches 1, we'll reset..
+                    print("Player blew up!")
+                    #print(ship)
+                    #print(asteroid)
+                    #done=True # for now we just end the game. 
+            
+        else: #ship is still resetting...
+            if ship_resetting==0: # on the last time, we'll redraw it
+                ship=(size[0]/2,size[1]/2)
+                #player_theta = 270
+                #player_velocity=[]
+                theta_changed=False
+            #print("ship is resetting... ",ship_resetting)
+        ast_bounds=[]
+        #delete the bounds..
+
+        
+    #draw stuff:
+    #first clear screen
+        screen.fill(black)
+        # draw the score!
+        scoreString= "Score: "+str(score)
+        text= font.render(scoreString,True,white)
+        screen.blit(text,[10,10])
+        # draw the lives remaining, as ships...
+        for i in range(lives):
+            draw_ship(screen,30+30*i,50,270, thruster)
+        #draw player on screen! (assigning thruster makes the thruster flash on/off when activated)
+        thruster=draw_ship(screen,ship[0],ship[1],player_theta,thruster) 
+        #if no asteroids, draw some. this should probably go elsewhere, since we are creating objects...
+        if len(asteroids)==0:
+            for i in range(diff_level+1): 
+                '''
+                   AST_VECTOR_DESCRIPTION:
+                   asteroids[i] = [vertices[], 0<=rotation<=360, direction (See get_rdm_dir() for range), type(0-3) ] 
+                '''
+                #we'll create two, and use a "keep out" box of 200 pixels that goes across the whoel screen, so the centre will be free for the playr to spawn
+                asteroids.append((create_ast_vector(0,[rdm(0,size[0]),rdm(size[1]/2+100,size[1])]),rdm(0,360),get_rdm_dir(),0))
+                asteroids.append((create_ast_vector(0,[ rdm(0,(size[0])), rdm(0,(size[1]/2)-100)]), rdm(0,360), get_rdm_dir(),0))
+            diff_level+=1 #next round will be harder!
+                # adds a vector of all its vertices, and a rotation offset...
+        #draw asteroids
+        for i in range(len(asteroids)):
+            vert=draw_ast_vector(asteroids[i][0],asteroids[i][1])
+            #assignment allowed print for debugging
+
+        #draw shots
+        for s in shots:
+            draw_shot(screen,s)
+
+        #draw explosions
+        explosions_to_pop=[]
+        for k in range(len(explosions)):
+            #draw the explosion:
+            draw_explosion(explosions[k][0],3+explosions[k][1])
+            print(explosions[k][1])
+            explosions[k]= [ explosions[k][0],explosions[k][1]+1]
+            #print(explosions[k][1])
+            if explosions[k][1]>20:
+                # we'll save it to remove later..
+                explosions_to_pop.append(k)
+        h=0 # this allows us to pop from old indices without getting messed up..
+        for p in explosions_to_pop:
+            explosions.pop(p-h)
+            h+=1
+            
+        pygame.display.flip()
+
+        clock.tick(clockspeed)
+        k+=1
+        lastShot-=1
+        ship_resetting-=1
+       # if k%5==0:
+    #    player_theta+=1
+
+
+    # end while loop
 
 pygame.quit()
