@@ -1,6 +1,7 @@
 import pygame
 import random
 import math
+from math import radians
 
 pygame.init()
 
@@ -29,6 +30,7 @@ TITLE_STRING="ASTEROIDS"
 pygame.key.set_repeat(math.ceil(500/clockspeed/2),math.ceil(500/clockspeed/2))
 
 
+
 def rdm(least,most):
     return random.randrange(least,most+1)
 # draws a polygon with approx given side length
@@ -41,6 +43,9 @@ def distance(c1,c2): # calculates the distance between two xy pairs c1 and c2
 #returns an (x,y) pair between -2 and 2
 def get_rdm_dir():
     return (rdm(-2,2),rdm(-2,2))
+def point_on_circle(xy_center, radius, theta):
+    #returns the point  on the circle centered at xy_center with radius radius, at angle theta
+    return (xy_center[0]+radius*math.cos(radians(theta)),xy_center[1]+radius*math.sin(radians(theta)))
 def create_ast_vector(type,xy):
     '''
     Returns a vector with the vertices of the asteroid, and its center point (centered at given xy vector..
@@ -77,8 +82,7 @@ def create_ast_vector(type,xy):
     x=xy[0]
     y=xy[1]
     vertices.append((x,y))
- #   print("asteroid vector:")
-  #  print(vertices)
+    
     return vertices
 
 def draw_ast_vector(ast_vector,rotation):
@@ -130,8 +134,42 @@ def new_shot(ship, theta):
 '''
 collision detection methods
 '''
+def sign(p1, p2, p3):
+    return ((p1[0]-p3[0])*(p2[1]-p3[1])) -((p2[0]-p3[0])*(p1[1]-p3[1]))
+
+def triangle_contains(a,b,c,point):
+    # determines if a given point is in the triangle with vertices abc
+   #code below is adapted from the thread at:
+    # http://www.gamedev.net/topic/295943-is-this-a-better-point-in-triangle-test-2d/
+    b0 = sign(point,a,b) <0
+    b1= sign(point,b,c)<0
+    b2=sign(point,c,a)<0
+   # print("results are: ",b0,b1,b2)
+    return b0==b1 and b1==b2
+                                       
+    
 def collision_complicated(shot,asteroid):
-    return True
+    ast_vector=asteroid[0]
+    rotation=asteroid[1]
+    verts=[]
+    x0=ast_vector[len(ast_vector)-1][0]
+    y0=ast_vector[len(ast_vector)-1][1]
+    for i in range(len(ast_vector)-1):
+        x=ast_vector[i][1]*math.cos(math.radians(ast_vector[i][0]+rotation))
+        y=ast_vector[i][1]*math.sin(math.radians(ast_vector[i][0]+rotation))
+        verts.append((x0+x,y0+y))
+    # now we can create 8 triangles.. with the vertices.. and check if they contain the shot.
+    length= len(verts)
+    for k in range(length):
+        vert1=verts[k]
+        vert3=verts[(k+1)%length]
+        vert2=[x0,y0]
+        x=(shot[0][0]+shot[2]*math.cos(math.radians(shot[1])))%size[0]
+        y= (shot[0][1]+shot[2]*math.sin(math.radians(shot[1])))%size[1]
+        if triangle_contains(vert1,vert2,vert3,(x,y)):
+            return True    
+    return False
+
 def collision_player_complex(ship, theta, asteroid):
     return True
 def collision_shot_simple(shot, boundary): 
@@ -154,43 +192,24 @@ def collision_player_simple(xy,theta,boundary):
      r_player= ship_scale
      r_bound=boundary[1]
      ctr_bound=boundary[0]
-     #calculate distance between ctr_bound and xy
-     #dist = sqrt((x2-x1)^2+(y2-y1)^2)
-     #dist = math.sqrt(math.pow((ctr_bound[0]-xy[0]),2)+math.pow((ctr_bound[1]-xy[1]),2))
-     #return dist <(r_player+r_bound)
      return collision_simple(r_player,xy,r_bound,ctr_bound)
 def create_ast_bound(vertices, rotation, direction,ast_type):
     # get the centre points from the vertice vector
     x0 = vertices[len(vertices)-1][0] 
     y0= vertices[len(vertices)-1][1] 
-    #get the angles (theta) of each point..
-    theta0= math.radians(45+rotation)
-    theta1= math.radians(135+rotation)
-    theta2 = math.radians(225+rotation)
-    theta3= math.radians(315 +rotation)
-
+    
     # we don't actually need  direction.
 
     # we will calculate the length based on the vertex with furthest dist from centre...
     #sidelength=0
     max_dist = 0
-    for vert in vertices:
-        curr_dist= distance(vert,(x0,y0))
-        if curr_dist>max_dist:
-            max_dist=curr_dist
-
-    #r=max_dist
-    #adding this until we can get the dist calculations to work properly, since its a good enoughapproximation
-    if ast_type==0:
-        max_dist=MAX_AST_ZERO
-    if ast_type==1:
-        max_dist=MAX_AST_ONE
-    if ast_type==2:
-        max_dist=MAX_AST_TWO
-    r= max_dist# changed from a bounding square to a circle for ease...
-   # verts=[(x0+math.cos(theta0),y0+math.sin(theta0)),(x0+math.cos(theta1),y0+math.sin(theta1)),(x0+math.cos(theta2),y0+math.sin(theta2)),(x0+math.cos(theta3),y0+math.sin(theta3))]
-    #return the centrepoint and radius of the bounding circle..
-    #print("ast bound radius = ",r)
+    for i in range(len(vertices)-1):# for all but the last vertex...
+        if max_dist<vertices[i][1]:
+            max_dist= vertices[i][1]
+ 
+    if max_dist==0:
+        print("Error maxing dist...")
+    r=max_dist
     return [(x0,y0),r]
 
 def draw_explosion(ctr, dist):
@@ -206,8 +225,8 @@ def draw_shot(screen,shot):
    # print(shot)
    # shot is a vector containing (xy, theta, distance)
    # so we draw a point on a circle with ctr xy, and radius lifetime, in the direction of theta
-    x=(shot[0][0] +shot[2]*math.cos(math.radians(shot[1])))%size[0]
-    y= (shot[0][1] +shot[2]*math.sin(math.radians(shot[1])))%size[1]
+    x = (shot[0][0] +shot[2]*math.cos(math.radians(shot[1])))%size[0]
+    y = (shot[0][1] +shot[2]*math.sin(math.radians(shot[1])))%size[1]
     pygame.draw.circle(screen,white,(int(x),int(y)),SHOT_SCALE,0)
     #pygame.draw.circle(screen, white,ctr,2,0)
 def calculateMovement(xy,theta, dist):
@@ -218,7 +237,18 @@ def calculateMovement(xy,theta, dist):
     newY= (xy[1]+dist*math.sin(theta)) % size[1]
     return (newX,newY)    
     # return a list of vertices, centered at the same place as the asteroid vector...
-   
+
+shot_sound=pygame.mixer.Sound("shot.wav")
+explosion_sound=pygame.mixer.Sound("explosion.wav")
+bg_music= pygame.mixer.Sound("asteroids.wav")
+
+def toggle_sound(soundOff):
+    # remember, we're going to be doing the opposite of 
+    if not soundOff:
+        bg_music.play(-1)
+    else:
+        pygame.mixer.stop() # stops all tracks        
+    return not soundOff
 
 size = (600,400)
 screen = pygame.display.set_mode(size)
@@ -227,11 +257,8 @@ done = False
 # just a clock. tick tock
 clock = pygame.time.Clock()
 #sounds...
-shot_sound=pygame.mixer.Sound("shot.wav")
-explosion_sound=pygame.mixer.Sound("explosion.wav")
-bg_music= pygame.mixer.Sound("asteroids.wav")
 #boolean to track if sound is on/off...
-sound_on=True
+sound_on=toggle_sound(False)
 
 # we have a wrapper loop to allow for a game menu/title screen,
 # and two inner loops- one which waits for/handles menu interaction
@@ -259,34 +286,25 @@ while done==False:
     screen.blit(menu,(x_menu,y_menu))
     screen.blit(menu2,(x_menu2,y_menu2))
     pygame.display.flip()
-    #title_bounds=pygame
     #and wait for input
     waiting=True
+    gameRunning=False
     while waiting:
-        
         for event in pygame.event.get():
-            '''if event.type==pygame.MOUSEBUTTONDOWN:
-                loc = pygame.mouse.get_pos()
-               #
-                    print("you clicked my tralalala")
-                    waiting=False
-                    gameRunning=True
-                else:
-                    print("you clicked, but missed..")
-                    '''
+            if event.type==pygame.QUIT:
+                done=True
+                waiting=False
             if event.type==pygame.KEYDOWN:
                 if event.key == pygame.K_n:
                     print("New game!")
                     waiting=False
                     gameRunning=True
                 if event.key== pygame.K_m:
-                    sound_on= not sound_on
+                    sound_on= toggle_sound(sound_on)
                 if event.key==pygame.K_q:
                     done=True
                     waiting=False
                     
-    if sound_on:
-        bg_music.play(-1)
     ship = (size[0]/2,size[1]/2)
     asteroids=[] # see AST_VECTOR_DESCRIPTION for explanation of what goes in here
     ast_bounds=[] # see AST_BOUND_SHAPES for description
@@ -305,6 +323,7 @@ while done==False:
     ship_resetting=-1
     lastShot=0
 
+    drewTriangle=False
     paused=False
     while gameRunning:
     # HANDLE EVENTS    
@@ -343,17 +362,22 @@ while done==False:
                 if event.key==pygame.K_ESCAPE:
                     #done=True
                     gameRunning=False
+                elif event.key==pygame.K_RSHIFT or event.key==pygame.K_LSHIFT:
+                    print("WARPING PLAYER!")
+                    ship_resetting=40
+                    player_velocity=[]
+                    player_theta=0
+                    ship=(rdm(0,size[0]),rdm(0,size[1]))
+                
                 elif event.key==pygame.K_m:
-                     sound_on=not sound_on
-                     if not sound_on:
-                         pygame.mixer.stop()
-                     else:
-                         bg_music.play()
+                     sound_on=toggle_sound(sound_on)
+                     
                 elif event.key==pygame.K_q:
                     print("quitting to menu!")
                     gameRunning=False
                 elif event.key==pygame.K_p:
                     print("pausing game by busy waiting...")
+                    toggle_sound(True) # we ALWAYS turn off sound in pause
                     paused=True                
             elif event.type==pygame.QUIT:
                 done=True
@@ -370,6 +394,9 @@ while done==False:
                 if event.type==pygame.KEYUP:
                     if event.key==pygame.K_p:
                         paused=False
+                        # we will turn sound back on if it was meant to be
+                        if sound_on:
+                            toggle_sound(False)
                         print("unpausing")
                         break
                     elif event.key==pygame.K_q:
@@ -431,7 +458,7 @@ while done==False:
             i=0 # so we can correspond to the asteroids list
             for bound in ast_bounds:
                 if collision_shot_simple(shot,bound):
-                    if collision_complicated(shot,asteroids[i][0]):
+                    if collision_complicated(shot,asteroids[i]):
                         #play a sound to celebrate the explosions!
                         if sound_on:
                             explosion_sound.play()
@@ -470,28 +497,18 @@ while done==False:
                         ship=(-1000,--1000)
                         player_velocity=[]
                         #i don't believe that empties the velocity...
-                        print("player velocity= ",player_velocity)
+                        #print("player velocity= ",player_velocity)
                         player_theta=0
+                        theta_changed=False
+                        ship=[size[0]//2,size[1]//2]            
                         ship_resetting=80 # when that reaches 1, we'll reset..
                     print("Player blew up!")
-                    #print(ship)
-                    #print(asteroid)
-                    #done=True # for now we just end the game. 
             
-        else: #ship is still resetting...
-            if ship_resetting==0: # on the last time, we'll redraw it
-                ship=(size[0]/2,size[1]/2)
-                #player_theta = 270
-                #player_velocity=[]
-                theta_changed=False
-            #print("ship is resetting... ",ship_resetting)
-        ast_bounds=[]
-        #delete the bounds..
-
-        
     #draw stuff:
     #first clear screen
+        
         screen.fill(black)
+        
         # draw the score!
         scoreString= "Score: "+str(score)
         text= font.render(scoreString,True,white)
@@ -500,7 +517,8 @@ while done==False:
         for i in range(lives):
             draw_ship(screen,30+30*i,50,270, thruster)
         #draw player on screen! (assigning thruster makes the thruster flash on/off when activated)
-        thruster=draw_ship(screen,ship[0],ship[1],player_theta,thruster) 
+        if ship_resetting<0:    
+            thruster=draw_ship(screen,ship[0],ship[1],player_theta,thruster) 
         #if no asteroids, draw some. this should probably go elsewhere, since we are creating objects...
         if len(asteroids)==0:
             for i in range(diff_level+1): 
@@ -517,7 +535,10 @@ while done==False:
         for i in range(len(asteroids)):
             vert=draw_ast_vector(asteroids[i][0],asteroids[i][1])
             #assignment allowed print for debugging
-
+        # next lines are for debugging...
+        #for bound in ast_bounds:
+         #   pygame.draw.circle(screen,red,bound[0],int(bound[1]),2) 
+        ast_bounds=[]
         #draw shots
         for s in shots:
             draw_shot(screen,s)
@@ -527,7 +548,7 @@ while done==False:
         for k in range(len(explosions)):
             #draw the explosion:
             draw_explosion(explosions[k][0],3+explosions[k][1])
-            print(explosions[k][1])
+         #   print(explosions[k][1])
             explosions[k]= [ explosions[k][0],explosions[k][1]+1]
             #print(explosions[k][1])
             if explosions[k][1]>20:
