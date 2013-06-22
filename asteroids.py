@@ -27,25 +27,27 @@ ROTAT_DELTA=3
 ACCEL_DELTA=0.1
 SHOT_DELAY=5
 TITLE_STRING="ASTEROIDS"
-pygame.key.set_repeat(math.ceil(500/clockspeed/2),math.ceil(500/clockspeed/2))
+pygame.key.set_repeat(math.ceil(200/clockspeed/2),math.ceil(200/clockspeed/2))
 
 
 
 def rdm(least,most):
     return random.randrange(least,most+1)
-# draws a polygon with approx given side length
-def draw_asteroid(screen,x,y,size):
-    #draw a polygon with semi random corners
-    pygame.draw.polygon(screen,white,[(x,y),(x+size,y),(x+size,y+size),(x,y+size)],5)
 def distance(c1,c2): # calculates the distance between two xy pairs c1 and c2
      dist = math.sqrt(math.pow((c2[0]-c1[0]),2)+math.pow((c2[1]-c1[1]),2))
      return dist
-#returns an (x,y) pair between -2 and 2
-def get_rdm_dir():
+
+def get_rdm_dir():#returns an (x,y) pair between -2 and 2
     return (rdm(-2,2),rdm(-2,2))
 def point_on_circle(xy_center, radius, theta):
     #returns the point  on the circle centered at xy_center with radius radius, at angle theta
     return (xy_center[0]+radius*math.cos(radians(theta)),xy_center[1]+radius*math.sin(radians(theta)))
+def calculateMovement(xy,theta, dist):
+    # deprecated, but easy enough to just call the replacement method.
+    return point_on_circle(xy,dist,theta)
+
+
+# creation methods (asteroid, shot objects)
 def create_ast_vector(type,xy):
     '''
     Returns a vector with the vertices of the asteroid, and its center point (centered at given xy vector..
@@ -84,6 +86,31 @@ def create_ast_vector(type,xy):
     vertices.append((x,y))
     
     return vertices
+def new_shot(ship, theta):
+    #returns a point centered just in front of the ship
+    # the direction the shot is going, and its lifetime (initially 0)
+    return [point_on_circle(ship,ship_scale//2,theta),theta,0]
+def create_ast_bound(vertices, rotation, direction,ast_type):
+    # get the centre points from the vertice vector
+    x0 = vertices[len(vertices)-1][0] 
+    y0= vertices[len(vertices)-1][1] 
+    
+    # we don't actually need  direction.
+
+    # we will calculate the length based on the vertex with furthest dist from centre...
+    #sidelength=0
+    max_dist = 0
+    for i in range(len(vertices)-1):# for all but the last vertex...
+        if max_dist<vertices[i][1]:
+            max_dist= vertices[i][1]
+ 
+    if max_dist==0:
+        print("Error maxing dist...")
+    r=max_dist
+    return [(x0,y0),r]
+
+
+# draw methods:
 
 def draw_ast_vector(ast_vector,rotation):
  
@@ -98,39 +125,60 @@ def draw_ast_vector(ast_vector,rotation):
     
     pygame.draw.polygon(screen,white,verts,3)
     return verts
-        
-def draw_asteroidV(l):
-    draw_asteroid(l[0],l[1],l[2],l[3])
-#takes a centre point of where the ship is, and its current rotation
-    # and draws the ship centered at x,y pointing in the given rotation
+   
 def draw_ship(screen,x,y,theta,drawThruster):
-    t1=math.radians(theta) # tip is at v1 let's say....
-    t2= math.radians((theta+138)%360) 
-    t3=math.radians((theta-138)%360)
+    #takes a centre point of where the ship is, and its current rotation
+    # and draws the ship centered at x,y pointing in the given rotation
+    
+    t1=theta # tip is at v1 let's say....
+    t2= (theta+138)%360
+    t3=(theta-138)%360
     #calculate the vertices based on the theta and stuff
     #v1= (ship_scale*(x+math.cos(v1)),ship_scale*(y+math.sin(v1)))
-    v1= (x+ship_scale*math.cos(t1),y+ship_scale*math.sin(t1))
-    
-    v2= (x+ship_scale*math.cos(t2),y+ship_scale*math.sin(t2))
-    v3= (x+ship_scale*math.cos(t3),y+ship_scale*math.sin(t3))
-    A_v2= (x+0.6*ship_scale*math.cos(t2),y+0.6*ship_scale*math.sin(t2))
-    A_v3= (x+0.6*ship_scale*math.cos(t3),y+0.6*ship_scale*math.sin(t3))
-    #pygame.draw.polygon(screen,white,[v1,v2,v3],2)
+    #v1= (x+ship_scale*math.cos(t1),y+ship_scale*math.sin(t1))
+    v1=point_on_circle((x,y),ship_scale,t1)
+    v2= point_on_circle((x,y),ship_scale,t2)
+    v3=point_on_circle((x,y),ship_scale,t3)
+    #(x+ship_scale*math.cos(t2),y+ship_scale*math.sin(t2))
+    #v3= (x+ship_scale*math.cos(t3),y+ship_scale*math.sin(t3))
+    A_v2= point_on_circle((x,y),0.6*ship_scale,t2)
+    A_v3= point_on_circle((x,y),0.6*ship_scale,t3)
     pygame.draw.line(screen,white,v1,v2,2)
     pygame.draw.line(screen,white,v1,v3,2)
     pygame.draw.line(screen,white,A_v2,A_v3,2)
     if drawThruster:
-        x=(A_v2[0]+A_v3[0])/2
-        y=(A_v2[1]+A_v3[1])/2
-        pygame.draw.circle(screen,white,(int(x),int(y)),2)
-    return False
-def new_shot(ship, theta):
-    x0=ship[0]
-    y0=ship[1]
-   
-    return [(x0,y0),theta,0]
+        t1_thrust=t1+180
+        t2_thrust=(t1+90)%360
+        t3_thrust=(t1-90)%360
+        xy_thrust=[(A_v2[0]+A_v3[0])//2, (A_v2[1]+A_v3[1])//2]
+        thrust_triangle=[]
+        thrust_triangle.append(point_on_circle(xy_thrust,ship_scale*0.3,t1_thrust))
+        thrust_triangle.append(point_on_circle(xy_thrust,ship_scale*0.3,t2_thrust))
+        thrust_triangle.append(point_on_circle(xy_thrust,ship_scale*0.3,t3_thrust))
+        pygame.draw.polygon(screen,white,thrust_triangle,0)
+        return False
+
+def draw_shot(screen,shot):
+   # print(shot)
+   # shot is a vector containing (xy, theta, distance)
+   # so we draw a point on a circle with ctr xy, and radius lifetime, in the direction of theta
+    x = (shot[0][0] +shot[2]*math.cos(math.radians(shot[1])))%size[0]
+    y = (shot[0][1] +shot[2]*math.sin(math.radians(shot[1])))%size[1]
+    pygame.draw.circle(screen,white,(int(x),int(y)),SHOT_SCALE,0)
 
 
+def draw_explosion(ctr, dist):
+    # we will draw a dozen random dots at the dist away from the ctr point...
+    angles=[]
+    for i in range(5):
+        angles.append(rdm(0,360))
+    for a in angles:
+        x=int(ctr[0]+dist*math.cos(math.radians(a)))
+        y= int(ctr[1]+dist*math.sin(math.radians(a)))
+        pygame.draw.circle(screen,white,(x,y),1,0)
+
+
+    
 '''
 collision detection methods
 '''
@@ -193,51 +241,9 @@ def collision_player_simple(xy,theta,boundary):
      r_bound=boundary[1]
      ctr_bound=boundary[0]
      return collision_simple(r_player,xy,r_bound,ctr_bound)
-def create_ast_bound(vertices, rotation, direction,ast_type):
-    # get the centre points from the vertice vector
-    x0 = vertices[len(vertices)-1][0] 
-    y0= vertices[len(vertices)-1][1] 
-    
-    # we don't actually need  direction.
 
-    # we will calculate the length based on the vertex with furthest dist from centre...
-    #sidelength=0
-    max_dist = 0
-    for i in range(len(vertices)-1):# for all but the last vertex...
-        if max_dist<vertices[i][1]:
-            max_dist= vertices[i][1]
- 
-    if max_dist==0:
-        print("Error maxing dist...")
-    r=max_dist
-    return [(x0,y0),r]
 
-def draw_explosion(ctr, dist):
-    # we will draw a dozen random dots at the dist away from the ctr point...
-    angles=[]
-    for i in range(5):
-        angles.append(rdm(0,360))
-    for a in angles:
-        x=int(ctr[0]+dist*math.cos(math.radians(a)))
-        y= int(ctr[1]+dist*math.sin(math.radians(a)))
-        pygame.draw.circle(screen,white,(x,y),1,0)
-def draw_shot(screen,shot):
-   # print(shot)
-   # shot is a vector containing (xy, theta, distance)
-   # so we draw a point on a circle with ctr xy, and radius lifetime, in the direction of theta
-    x = (shot[0][0] +shot[2]*math.cos(math.radians(shot[1])))%size[0]
-    y = (shot[0][1] +shot[2]*math.sin(math.radians(shot[1])))%size[1]
-    pygame.draw.circle(screen,white,(int(x),int(y)),SHOT_SCALE,0)
-    #pygame.draw.circle(screen, white,ctr,2,0)
-def calculateMovement(xy,theta, dist):
-    # moves the xy pair  the dist distance in theta direction...
-    # returns the new location xy
- #   print(xy)
-    newX= (xy[0]+ dist*math.cos(theta))%size[0]
-    newY= (xy[1]+dist*math.sin(theta)) % size[1]
-    return (newX,newY)    
-    # return a list of vertices, centered at the same place as the asteroid vector...
-
+# sound related stuff (doesnt go anywhere else...)
 shot_sound=pygame.mixer.Sound("shot.wav")
 explosion_sound=pygame.mixer.Sound("explosion.wav")
 bg_music= pygame.mixer.Sound("asteroids.wav")
@@ -328,7 +334,11 @@ while done==False:
     while gameRunning:
     # HANDLE EVENTS    
         for event in pygame.event.get():
-            if event.type==pygame.KEYDOWN:
+            if event.type==pygame.KEYDOWN and ship_resetting<0:
+                '''
+    KEYDOWN events are for player interaction, since it allows for repetition
+    we ignore them if the ship is resetting, since player can't do anything
+                '''
                 if event.key == pygame.K_SPACE:
                     #then player shoots. we need to slow down the shot rate, so we'll add a timer as well..
                     #also cant shoot while ship is exploded...
@@ -339,10 +349,11 @@ while done==False:
                         lastShot=SHOT_DELAY
                 elif event.key == pygame.K_UP:
                     #if we've turned, or not moved we'll add a new vector...
+                    thruster=not thruster # we'll toggle it every time, so it flickers
                     if theta_changed or len(player_velocity)==0:
                         player_velocity.append((ACCEL_DELTA,player_theta))
                         theta_changed=False
-                        thruster=True
+                        
                     else: # if not changed, remove the last vector added and increase it a bit
                         player_velocity.append((player_velocity.pop()[0]+ACCEL_DELTA,player_theta))
                 elif event.key == pygame.K_DOWN:
@@ -358,7 +369,10 @@ while done==False:
                 elif event.key == pygame.K_LEFT:
                     player_theta-=ROTAT_DELTA
                     theta_changed=False
+            #end keydown events
             if event.type==pygame.KEYUP:
+            # KEYUP events are for menu/game interaction
+            # we dont want to allow these to repeat
                 if event.key==pygame.K_ESCAPE:
                     #done=True
                     gameRunning=False
@@ -379,16 +393,14 @@ while done==False:
                     print("pausing game by busy waiting...")
                     toggle_sound(True) # we ALWAYS turn off sound in pause
                     paused=True                
+
+            # end keyup events
             elif event.type==pygame.QUIT:
                 done=True
                 gameRunning=False
                 break
-            
-    #        if event.type==pygame.KEYUP:
-            # we don't handle keyups, because we really wanted to be handling repeated press...
-        #would also add more shots if player fired, change player theta if necessary
-                #and change player_velocity
-    # this goes here to handle pausing...
+
+    # this goes here to handle pausing... does "busy waiting" until unpaused
         while paused:
             for event in pygame.event.get():
                 if event.type==pygame.KEYUP:
@@ -426,7 +438,9 @@ while done==False:
         if ship_resetting<0: # dont move if ship is resetting..
             for vel in player_velocity:
                 ship=calculateMovement(ship,vel[1],vel[0])
-        
+            # this  ensures the ship ends up on the other side of the screen if it goes off screen..
+                ship=[ship[0]%size[0],ship[1]%size[1]]
+            
       #third we calc movement of shots
         #simply put, we will increase its lifetime, and delete if it is too old...
         for i in range(len(shots)):
@@ -515,10 +529,10 @@ while done==False:
         screen.blit(text,[10,10])
         # draw the lives remaining, as ships...
         for i in range(lives):
-            draw_ship(screen,30+30*i,50,270, thruster)
+            draw_ship(screen,30+30*i,50,270, False)
         #draw player on screen! (assigning thruster makes the thruster flash on/off when activated)
         if ship_resetting<0:    
-            thruster=draw_ship(screen,ship[0],ship[1],player_theta,thruster) 
+            draw_ship(screen,ship[0],ship[1],player_theta,thruster) 
         #if no asteroids, draw some. this should probably go elsewhere, since we are creating objects...
         if len(asteroids)==0:
             for i in range(diff_level+1): 
