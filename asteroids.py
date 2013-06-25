@@ -23,12 +23,12 @@ ship_scale=15
 clockspeed=20
 SHOT_SCALE=2
 SHOT_SPEED=5
-ROTAT_DELTA=3
+ROTAT_DELTA=9
 ACCEL_DELTA=0.1
 SHOT_DELAY=5
 THRUST_DELAY=3
 TITLE_STRING="ASTEROIDS"
-pygame.key.set_repeat(math.ceil(200/clockspeed/2),math.ceil(200/clockspeed/2))
+pygame.key.set_repeat(clockspeed//5,clockspeed//3)
 
 
 
@@ -266,6 +266,7 @@ bg_music= pygame.mixer.Sound("asteroids.wav")
 def toggle_sound(soundOff):
     # remember, we're going to be doing the opposite of 
     if not soundOff:
+        bg_music.stop() # just to be sure..
         bg_music.play(-1)
     else:
         pygame.mixer.stop() # stops all tracks        
@@ -302,7 +303,7 @@ while done==False:
     x_menu2= (size[0]//2)-(menuFont.size(menu_string2)[0]//2)
     y_menu=size[1]-2*menuFont.size(menu_string)[1] - 45
     y_menu2=size[1]-1*menuFont.size(menu_string2)[1]-15
-
+    screen.fill(black)
     screen.blit(title,(x_title,y_title))
     screen.blit(menu,(x_menu,y_menu))
     screen.blit(menu2,(x_menu2,y_menu2))
@@ -332,7 +333,7 @@ while done==False:
     ast_bounds=[] # see AST_BOUND_SHAPES for description
     shots=[] # each element is a vector of (starting coordinates, angle of direction, lifetime)
     player_velocity=[]
-    lives=3
+    lives=0
     font = pygame.font.Font(None,25) # we'll use that for drawing the score
     explosions = [] # will store xy vectors  and lifetimesto draw explosions at...
     theta_changed=False
@@ -492,9 +493,9 @@ while done==False:
                             explosion_sound.play()
                         explosions.append((ship,0))
                         if lives==0:
-                            game_running=False
+                            gameRunning=False
                             game_over=True
-                            
+                        print("player has ",lives," lives left")
                         lives-=1
                         ship=(-1000,-1000)
                         player_velocity=[]
@@ -609,16 +610,37 @@ while done==False:
         lastShot-=1
         ship_resetting-=1
         last_thrust-=1
-        if game_over==True:
-        # load, display, alter high scores file?
-            print("game over, your score was: ",score)
-            gameRunning=False
+       
+                    
+                    
+                        
+                            
        # if k%5==0:
     #    player_theta+=1
     toggle_sound(False)
 
     # end game while loop
-    
-        
+    if game_over==True and lives<=0:
+           # load, display, alter high scores file?
+               print("game over, your score was: ",score)
+               waitingTime=0
+               screen.fill(black)
+               gameOver= titleFont.render("Game Over", True, red)
+               scoreString="Your score was: " +str(score)
+               score = menuFont.render(scoreString, True, red)
+               x_score=size[0]//2 -menuFont.size(scoreString)[0]//2
+               y_score= size[1]-(size[1]//3) - menuFont.size(scoreString)[1]//2
+               x_game_over= size[0]//2 - titleFont.size("Game Over")[0]//2
+               y_game_over= size[1]//3-titleFont.size("Game Over")[1]//2
+               screen.blit(gameOver,(x_game_over,y_game_over))
+               screen.blit(score, (x_score,y_score))
+               pygame.display.flip()
+               while game_over:
+                   #draw gameover screen:
+                   clock.tick(clockspeed)
+                   waitingTime+=1
+                   if waitingTime==clockspeed*5:
+                       game_over=False
+            
 
 pygame.quit()
